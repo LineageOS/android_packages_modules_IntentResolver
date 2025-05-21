@@ -29,7 +29,6 @@ import android.app.ActivityThread;
 import android.app.AppGlobals;
 import android.app.admin.DevicePolicyManager;
 import android.content.ComponentName;
-import android.content.ContentResolver;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.IPackageManager;
@@ -130,8 +129,9 @@ public class IntentForwarderActivity extends Activity  {
         }
 
         final int callingUserId = getUserId();
+        String resolvedType = intentReceived.resolveTypeIfNeeded(getContentResolver());
         final Intent newIntent = canForward(intentReceived, getUserId(), targetUserId,
-                mInjector.getIPackageManager(), getContentResolver());
+                mInjector.getIPackageManager(), resolvedType);
 
         if (newIntent == null) {
             Slog.wtf(TAG, "the intent: " + intentReceived + " cannot be forwarded from user "
@@ -142,7 +142,9 @@ public class IntentForwarderActivity extends Activity  {
 
         newIntent.prepareToLeaveUser(callingUserId);
         final CompletableFuture<ResolveInfo> targetResolveInfoFuture =
-                mInjector.resolveActivityAsUser(newIntent, MATCH_DEFAULT_ONLY, targetUserId);
+                mInjector.resolveActivityAsUser(newIntent, resolvedType,
+                        MATCH_DEFAULT_ONLY,
+                        targetUserId);
         targetResolveInfoFuture
                 .thenApplyAsync(targetResolveInfo -> {
                     if (isResolverActivityResolveInfo(targetResolveInfo)) {
@@ -220,6 +222,9 @@ public class IntentForwarderActivity extends Activity  {
         // when cross-profile intents are disabled.
         int selectedProfile = findSelectedProfile(className);
         sanitizeIntent(intentReceived);
+        if (intentReceived.getSelector() != null) {
+            sanitizeIntent(intentReceived.getSelector());
+        }
         intentReceived.putExtra(EXTRA_SELECTED_PROFILE, selectedProfile);
         Intent innerIntent = intentReceived.getParcelableExtra(Intent.EXTRA_INTENT);
         if (innerIntent == null) {
@@ -311,14 +316,14 @@ public class IntentForwarderActivity extends Activity  {
      */
 
     public static Intent canForward(Intent incomingIntent, int sourceUserId, int targetUserId,
-            IPackageManager packageManager, ContentResolver contentResolver) {
+            IPackageManager packageManager, String resolvedType) {
         Intent forwardIntent = new Intent(incomingIntent);
         forwardIntent.addFlags(
                 Intent.FLAG_ACTIVITY_FORWARD_RESULT | Intent.FLAG_ACTIVITY_PREVIOUS_IS_TOP);
         sanitizeIntent(forwardIntent);
 
         if (!canForwardInner(forwardIntent, sourceUserId, targetUserId, packageManager,
-                contentResolver)) {
+                resolvedType)) {
             return null;
         }
 
@@ -326,7 +331,7 @@ public class IntentForwarderActivity extends Activity  {
             sanitizeIntent(forwardIntent.getSelector());
 
             if (!canForwardInner(forwardIntent.getSelector(), sourceUserId, targetUserId,
-                    packageManager, contentResolver)) {
+                    packageManager, resolvedType)) {
                 return null;
             }
         }
@@ -334,12 +339,11 @@ public class IntentForwarderActivity extends Activity  {
     }
 
     private static boolean canForwardInner(Intent intent, int sourceUserId, int targetUserId,
-            IPackageManager packageManager, ContentResolver contentResolver) {
+            IPackageManager packageManager, String resolvedType) {
         if (Intent.ACTION_CHOOSER.equals(intent.getAction())) {
             return false;
         }
 
-        String resolvedType = intent.resolveTypeIfNeeded(contentResolver);
         try {
             if (packageManager.canForwardTo(
                     intent, resolvedType, sourceUserId, targetUserId)) {
@@ -422,8 +426,17 @@ public class IntentForwarderActivity extends Activity  {
 
         @Override
         @Nullable
-        public CompletableFuture<ResolveInfo> resolveActivityAsUser(
-                Intent intent, int flags, int userId) {
+        public CompletableFuture<ResolveInfo> resolveActivityAsUser(Intent intent,
+                String resolvedType, int flags, int userId) {
+            return CompletableFuture.supplyAsync(
+                    () -> getPackageManager().resolveActivityAsUser(intent,
+                            resolvedType, flags, userId));
+        }
+
+        @Override
+        @Nullable
+        public CompletableFuture<ResolveInfo> resolveActivityAsUser(Intent intent, int flags,
+                int userId) {
             return CompletableFuture.supplyAsync(
                     () -> getPackageManager().resolveActivityAsUser(intent, flags, userId));
         }
@@ -440,6 +453,9 @@ public class IntentForwarderActivity extends Activity  {
         UserManager getUserManager();
 
         PackageManager getPackageManager();
+
+        CompletableFuture<ResolveInfo> resolveActivityAsUser(Intent intent,
+                String resolvedType, int flags, int userId);
 
         CompletableFuture<ResolveInfo> resolveActivityAsUser(Intent intent, int flags, int userId);
 
