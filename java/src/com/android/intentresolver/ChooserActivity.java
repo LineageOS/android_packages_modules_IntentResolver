@@ -24,6 +24,7 @@ import static android.app.admin.DevicePolicyResources.Strings.Core.RESOLVER_CROS
 import static android.stats.devicepolicy.nano.DevicePolicyEnums.RESOLVER_EMPTY_STATE_NO_SHARING_TO_PERSONAL;
 import static android.stats.devicepolicy.nano.DevicePolicyEnums.RESOLVER_EMPTY_STATE_NO_SHARING_TO_WORK;
 
+import static com.android.intentresolver.util.IntentUtils.sanitizePayloadIntents;
 import static com.android.internal.util.LatencyTracker.ACTION_LOAD_SHARE_SHEET;
 
 import android.annotation.IntDef;
@@ -523,16 +524,21 @@ public class ChooserActivity extends ResolverActivity implements
             List<ResolveInfo> rList,
             boolean filterLastUsed) {
         int selectedProfile = findSelectedProfile();
+        List<Intent> crossProfileIntents = sanitizePayloadIntents(mIntents);
         ChooserGridAdapter personalAdapter = createChooserGridAdapter(
                 /* context */ this,
-                /* payloadIntents */ mIntents,
+                /* payloadIntents */ selectedProfile == PROFILE_PERSONAL
+                        ? mIntents
+                        : crossProfileIntents,
                 selectedProfile == PROFILE_PERSONAL ? initialIntents : null,
                 rList,
                 filterLastUsed,
                 /* userHandle */ getPersonalProfileUserHandle());
         ChooserGridAdapter workAdapter = createChooserGridAdapter(
                 /* context */ this,
-                /* payloadIntents */ mIntents,
+                /* payloadIntents */ selectedProfile == PROFILE_WORK
+                        ? mIntents
+                        : crossProfileIntents,
                 selectedProfile == PROFILE_WORK ? initialIntents : null,
                 rList,
                 filterLastUsed,
