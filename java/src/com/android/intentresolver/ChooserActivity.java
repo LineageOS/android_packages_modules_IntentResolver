@@ -26,6 +26,7 @@ import static android.stats.devicepolicy.nano.DevicePolicyEnums.RESOLVER_EMPTY_S
 
 import static androidx.lifecycle.LifecycleKt.getCoroutineScope;
 
+import static com.android.intentresolver.util.IntentUtils.sanitizePayloadIntents;
 import static com.android.internal.util.LatencyTracker.ACTION_LOAD_SHARE_SHEET;
 
 import android.app.Activity;
@@ -521,9 +522,12 @@ public class ChooserActivity extends Hilt_ChooserActivity implements
             boolean filterLastUsed,
             TargetDataLoader targetDataLoader) {
         int selectedProfile = findSelectedProfile();
+        List<Intent> crossProfileIntents = sanitizePayloadIntents(mIntents);
         ChooserGridAdapter personalAdapter = createChooserGridAdapter(
                 /* context */ this,
-                /* payloadIntents */ mIntents,
+                /* payloadIntents */ selectedProfile == PROFILE_PERSONAL
+                        ? mIntents
+                        : crossProfileIntents,
                 selectedProfile == PROFILE_PERSONAL ? initialIntents : null,
                 rList,
                 filterLastUsed,
@@ -531,7 +535,9 @@ public class ChooserActivity extends Hilt_ChooserActivity implements
                 targetDataLoader);
         ChooserGridAdapter workAdapter = createChooserGridAdapter(
                 /* context */ this,
-                /* payloadIntents */ mIntents,
+                /* payloadIntents */ selectedProfile == PROFILE_WORK
+                        ? mIntents
+                        : crossProfileIntents,
                 selectedProfile == PROFILE_WORK ? initialIntents : null,
                 rList,
                 filterLastUsed,
