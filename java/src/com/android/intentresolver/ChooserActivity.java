@@ -1324,18 +1324,22 @@ public class ChooserActivity extends ResolverActivity implements
                 this::getFirstVisibleImgPreviewView,
                 new ChooserActionFactory.ActionActivityStarter() {
                     @Override
-                    public void safelyStartActivityAsPersonalProfileUser(TargetInfo targetInfo) {
-                        safelyStartActivityAsUser(targetInfo, getPersonalProfileUserHandle());
+                    public void safelyStartActivityAsLaunchingUser(TargetInfo targetInfo) {
+                        safelyStartActivityAsUser(
+                            targetInfo,
+                            UserHandle.of(UserHandle.myUserId()));
                         finish();
                     }
 
                     @Override
-                    public void safelyStartActivityAsPersonalProfileUserWithSharedElementTransition(
+                    public void safelyStartActivityAsLaunchingUserWithSharedElementTransition(
                             TargetInfo targetInfo, View sharedElement, String sharedElementName) {
                         ActivityOptions options = ActivityOptions.makeSceneTransitionAnimation(
                                 ChooserActivity.this, sharedElement, sharedElementName);
                         safelyStartActivityAsUser(
-                                targetInfo, getPersonalProfileUserHandle(), options.toBundle());
+                                targetInfo,
+                                UserHandle.of(UserHandle.myUserId()),
+                                options.toBundle());
                         startFinishAnimation();
                     }
                 },
