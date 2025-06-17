@@ -1330,20 +1330,21 @@ public class ChooserActivity extends Hilt_ChooserActivity implements
                 this::getFirstVisibleImgPreviewView,
                 new ChooserActionFactory.ActionActivityStarter() {
                     @Override
-                    public void safelyStartActivityAsPersonalProfileUser(TargetInfo targetInfo) {
+                    public void safelyStartActivityAsLaunchingUser(TargetInfo targetInfo) {
                         safelyStartActivityAsUser(
-                                targetInfo, getAnnotatedUserHandles().personalProfileUserHandle);
+                            targetInfo,
+                            UserHandle.of(UserHandle.myUserId()));
                         finish();
                     }
 
                     @Override
-                    public void safelyStartActivityAsPersonalProfileUserWithSharedElementTransition(
+                    public void safelyStartActivityAsLaunchingUserWithSharedElementTransition(
                             TargetInfo targetInfo, View sharedElement, String sharedElementName) {
                         ActivityOptions options = ActivityOptions.makeSceneTransitionAnimation(
                                 ChooserActivity.this, sharedElement, sharedElementName);
                         safelyStartActivityAsUser(
                                 targetInfo,
-                                getAnnotatedUserHandles().personalProfileUserHandle,
+                                UserHandle.of(UserHandle.myUserId()),
                                 options.toBundle());
                         // Can't finish right away because the shared element transition may not
                         // be ready to start.
