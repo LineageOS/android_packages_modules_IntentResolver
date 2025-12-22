@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "b03e950d_7c884165",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 17656
+      },
+      "writtenOn": "2025-12-22T08:42:19Z",
+      "side": 1,
+      "message": "Sorry, I had overlooked that one, it was in my tree (and compiled well), but for IntentResolver, Google does not have any android-security android-security-13.0.0* tags (but we\u0027ve picked also in the past from A14 accordingly)",
+      "revId": "b80806b2bf2800b8ea9915004ea33374b84d864b",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    }
+  ]
+}
