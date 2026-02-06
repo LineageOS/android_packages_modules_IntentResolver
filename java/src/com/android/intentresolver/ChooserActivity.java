@@ -24,7 +24,7 @@ import static android.app.admin.DevicePolicyResources.Strings.Core.RESOLVER_CROS
 import static android.stats.devicepolicy.nano.DevicePolicyEnums.RESOLVER_EMPTY_STATE_NO_SHARING_TO_PERSONAL;
 import static android.stats.devicepolicy.nano.DevicePolicyEnums.RESOLVER_EMPTY_STATE_NO_SHARING_TO_WORK;
 
-import static com.android.intentresolver.util.IntentUtils.sanitizePayloadIntents;
+import static com.android.intentresolver.util.IntentUtils.prepareCrossProfileIntents;
 import static com.android.internal.util.LatencyTracker.ACTION_LOAD_SHARE_SHEET;
 
 import android.annotation.IntDef;
@@ -80,6 +80,7 @@ import androidx.viewpager.widget.ViewPager;
 
 import com.android.intentresolver.AbstractMultiProfilePagerAdapter.EmptyState;
 import com.android.intentresolver.AbstractMultiProfilePagerAdapter.EmptyStateProvider;
+import com.android.intentresolver.AbstractMultiProfilePagerAdapter.CrossProfileIntentsChecker;
 import com.android.intentresolver.NoCrossProfileEmptyStateProvider.DevicePolicyBlockerEmptyState;
 import com.android.intentresolver.chooser.DisplayResolveInfo;
 import com.android.intentresolver.chooser.MultiDisplayResolveInfo;
@@ -494,9 +495,17 @@ public class ChooserActivity extends ResolverActivity implements
                         /* devicePolicyEventId= */ RESOLVER_EMPTY_STATE_NO_SHARING_TO_WORK,
                         /* devicePolicyEventCategory= */ ResolverActivity.METRICS_CATEGORY_CHOOSER);
 
-        return new NoCrossProfileEmptyStateProvider(getPersonalProfileUserHandle(),
-                noWorkToPersonalEmptyState, noPersonalToWorkEmptyState,
-                createCrossProfileIntentsChecker(), createMyUserIdProvider());
+        return new NoCrossProfileEmptyStateProvider(
+                getPersonalProfileUserHandle(),
+                noWorkToPersonalEmptyState,
+                noPersonalToWorkEmptyState,
+                createCrossProfileIntentsChecker(),
+                createMyUserIdProvider());
+    }
+
+    @Override
+    protected CrossProfileIntentsChecker createCrossProfileIntentsChecker() {
+        return new AlwaysTrueCrossProfileIntentsChecker(getContentResolver());
     }
 
     private ChooserMultiProfilePagerAdapter createChooserMultiProfilePagerAdapterForOneProfile(
@@ -524,7 +533,21 @@ public class ChooserActivity extends ResolverActivity implements
             List<ResolveInfo> rList,
             boolean filterLastUsed) {
         int selectedProfile = findSelectedProfile();
-        List<Intent> crossProfileIntents = sanitizePayloadIntents(mIntents);
+        UserHandle personalProfileUserHandle = getPersonalProfileUserHandle();
+        UserHandle workProfileUserHandle = getWorkProfileUserHandle();
+        List<Intent> crossProfileIntents = selectedProfile == PROFILE_PERSONAL
+                ? prepareCrossProfileIntents(
+                        getContentResolver(),
+                        mChooserRequest.getTargetIntent(),
+                        mIntents,
+                        personalProfileUserHandle,
+                        workProfileUserHandle)
+                : prepareCrossProfileIntents(
+                        getContentResolver(),
+                        mChooserRequest.getTargetIntent(),
+                        mIntents,
+                        workProfileUserHandle,
+                        personalProfileUserHandle);
         ChooserGridAdapter personalAdapter = createChooserGridAdapter(
                 /* context */ this,
                 /* payloadIntents */ selectedProfile == PROFILE_PERSONAL
@@ -533,7 +556,7 @@ public class ChooserActivity extends ResolverActivity implements
                 selectedProfile == PROFILE_PERSONAL ? initialIntents : null,
                 rList,
                 filterLastUsed,
-                /* userHandle */ getPersonalProfileUserHandle());
+                /* userHandle */ personalProfileUserHandle);
         ChooserGridAdapter workAdapter = createChooserGridAdapter(
                 /* context */ this,
                 /* payloadIntents */ selectedProfile == PROFILE_WORK
@@ -542,15 +565,15 @@ public class ChooserActivity extends ResolverActivity implements
                 selectedProfile == PROFILE_WORK ? initialIntents : null,
                 rList,
                 filterLastUsed,
-                /* userHandle */ getWorkProfileUserHandle());
+                /* userHandle */ workProfileUserHandle);
         return new ChooserMultiProfilePagerAdapter(
                 /* context */ this,
                 personalAdapter,
                 workAdapter,
-                createEmptyStateProvider(/* workProfileUserHandle= */ getWorkProfileUserHandle()),
+                createEmptyStateProvider(/* workProfileUserHandle= */ workProfileUserHandle),
                 () -> mWorkProfileAvailability.isQuietModeEnabled(),
                 selectedProfile,
-                getWorkProfileUserHandle(),
+                workProfileUserHandle,
                 mMaxTargetsPerRow);
     }
 
