@@ -224,9 +224,6 @@ public class IntentForwarderActivity extends Activity  {
         // when cross-profile intents are disabled.
         int selectedProfile = findSelectedProfile(className);
         sanitizeIntent(intentReceived);
-        if (intentReceived.getSelector() != null) {
-            sanitizeIntent(intentReceived.getSelector());
-        }
         intentReceived.putExtra(EXTRA_SELECTED_PROFILE, selectedProfile);
         Intent innerIntent = intentReceived.getParcelableExtra(Intent.EXTRA_INTENT);
         if (innerIntent == null) {
@@ -329,8 +326,6 @@ public class IntentForwarderActivity extends Activity  {
         }
 
         if (forwardIntent.getSelector() != null) {
-            sanitizeIntent(forwardIntent.getSelector());
-
             if (!canForwardInner(forwardIntent.getSelector(), sourceUserId, targetUserId,
                     packageManager, resolvedType)) {
                 return null;
@@ -388,12 +383,19 @@ public class IntentForwarderActivity extends Activity  {
     }
 
     /**
-     * Sanitize the intent in place.
+     * Sanitize the intent and sanitize its selector in place.
      */
     private static void sanitizeIntent(Intent intent) {
         // Apps should not be allowed to target a specific package/ component in the target user.
         intent.setPackage(null);
         intent.setComponent(null);
+
+        var selector = intent.getSelector();
+        if (selector != null) {
+            selector.setPackage(null);
+            selector.setComponent(null);
+            selector.setSelector(null);
+        }
     }
 
     protected MetricsLogger getMetricsLogger() {
