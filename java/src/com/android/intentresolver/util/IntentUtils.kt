@@ -18,24 +18,85 @@
 
 package com.android.intentresolver.util
 
+import android.app.AppGlobals
+import android.content.ContentResolver
 import android.content.Intent
+import android.content.pm.IPackageManager
+import android.os.UserHandle
+import com.android.intentresolver.IntentForwarderActivity
 
-fun sanitizePayloadIntents(intents: List<Intent?>): List<Intent?> =
-    intents.map { intent ->
-        if (intent == null) {
-            null
-        } else {
-            Intent(intent).also { sanitized ->
-                sanitized.setPackage(null)
-                sanitized.setComponent(null)
-                sanitized.selector?.let {
-                    sanitized.setSelector(
-                        Intent(it).apply {
-                            setPackage(null)
-                            setComponent(null)
+fun prepareCrossProfileIntents(
+    contentResolver: ContentResolver,
+    targetIntent: Intent,
+    intents: List<Intent?>,
+    source: UserHandle,
+    target: UserHandle
+): List<Intent?> {
+    val packageManager = AppGlobals.getPackageManager()
+    if (!isCrossProfileIntent(
+            targetIntent,
+            source.getIdentifier(),
+            target.getIdentifier(),
+            packageManager,
+            contentResolver)) {
+        // If the target intent can't be forwarded, then we can't forward any intents The empty
+        // collections will be handled by the NoCrossProfileEmptyStateProvider.
+        return emptyList()
+    }
+
+    return sanitizePayloadIntents(intents) { intent ->
+        // The first item in the list is the target intent (but it is not necessarily the same
+        // object as the targetIntent passed in to this method). See the ResolverActivity.mIntents
+        // initialization.
+        intents[0] == intent ||
+            isCrossProfileIntent(
+                    intent,
+                    source.getIdentifier(),
+                    target.getIdentifier(),
+                    packageManager,
+                    contentResolver)
+    }
+}
+
+fun sanitizePayloadIntents(
+    intents: List<Intent?>,
+    predicate: (Intent) -> Boolean = { true },
+): List<Intent?> =
+    buildList(capacity = intents.size) {
+        for (intent in intents) {
+            if (intent == null) {
+                add(null)
+                continue
+            }
+            if (predicate(intent)) {
+                add(
+                    Intent(intent).also { sanitized ->
+                        sanitized.setPackage(null)
+                        sanitized.setComponent(null)
+                        sanitized.selector?.let {
+                            sanitized.setSelector(
+                                Intent(it).apply {
+                                    setPackage(null)
+                                    setComponent(null)
+                                }
+                            )
                         }
-                    )
-                }
+                    }
+                )
             }
         }
     }
+
+fun isCrossProfileIntent(
+    intent: Intent,
+    sourceUserId: Int,
+    targetUserId: Int,
+    packageManager: IPackageManager,
+    contentResolver: ContentResolver,
+) = IntentForwarderActivity.canForward(
+        intent,
+        sourceUserId,
+        targetUserId,
+        packageManager,
+        intent.resolveTypeIfNeeded(contentResolver),
+    ) != null

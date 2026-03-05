@@ -26,7 +26,7 @@ import static android.stats.devicepolicy.nano.DevicePolicyEnums.RESOLVER_EMPTY_S
 
 import static androidx.lifecycle.LifecycleKt.getCoroutineScope;
 
-import static com.android.intentresolver.util.IntentUtils.sanitizePayloadIntents;
+import static com.android.intentresolver.util.IntentUtils.prepareCrossProfileIntents;
 import static com.android.internal.util.LatencyTracker.ACTION_LOAD_SHARE_SHEET;
 
 import android.app.Activity;
@@ -83,6 +83,7 @@ import com.android.intentresolver.contentpreview.BasePreviewViewModel;
 import com.android.intentresolver.contentpreview.ChooserContentPreviewUi;
 import com.android.intentresolver.contentpreview.HeadlineGeneratorImpl;
 import com.android.intentresolver.contentpreview.PreviewViewModel;
+import com.android.intentresolver.emptystate.CrossProfileIntentsChecker;
 import com.android.intentresolver.emptystate.EmptyState;
 import com.android.intentresolver.emptystate.EmptyStateProvider;
 import com.android.intentresolver.emptystate.NoCrossProfileEmptyStateProvider;
@@ -492,6 +493,11 @@ public class ChooserActivity extends Hilt_ChooserActivity implements
                 getAnnotatedUserHandles().tabOwnerUserHandleForLaunch);
     }
 
+    @Override
+    protected CrossProfileIntentsChecker createCrossProfileIntentsChecker() {
+        return new AlwaysTrueCrossProfileIntentsChecker(getContentResolver());
+    }
+
     private ChooserMultiProfilePagerAdapter createChooserMultiProfilePagerAdapterForOneProfile(
             Intent[] initialIntents,
             List<ResolveInfo> rList,
@@ -522,7 +528,19 @@ public class ChooserActivity extends Hilt_ChooserActivity implements
             boolean filterLastUsed,
             TargetDataLoader targetDataLoader) {
         int selectedProfile = findSelectedProfile();
-        List<Intent> crossProfileIntents = sanitizePayloadIntents(mIntents);
+        List<Intent> crossProfileIntents = selectedProfile == PROFILE_PERSONAL
+                ? prepareCrossProfileIntents(
+                        getContentResolver(),
+                        mChooserRequest.getTargetIntent(),
+                        mIntents,
+                        getAnnotatedUserHandles().personalProfileUserHandle,
+                        getAnnotatedUserHandles().workProfileUserHandle)
+                : prepareCrossProfileIntents(
+                        getContentResolver(),
+                        mChooserRequest.getTargetIntent(),
+                        mIntents,
+                        getAnnotatedUserHandles().workProfileUserHandle,
+                        getAnnotatedUserHandles().personalProfileUserHandle);
         ChooserGridAdapter personalAdapter = createChooserGridAdapter(
                 /* context */ this,
                 /* payloadIntents */ selectedProfile == PROFILE_PERSONAL
