@@ -17,33 +17,41 @@
 package com.android.intentresolver.util
 
 import android.content.ComponentName
+import android.content.ContentResolver
 import android.content.Intent
 import android.content.Intent.ACTION_SEND
+import android.content.Intent.ACTION_VIEW
+import android.content.pm.IPackageManager
+import android.net.Uri
+import android.os.UserHandle
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
+import org.mockito.kotlin.mock
 
 class IntentUtilsTest {
+    private val mockContentResolver = mock<ContentResolver>()
+    private val mockPackageManager = mock<IPackageManager>()
+
+    private val sourceUser = UserHandle.of(0)
+    private val targetUser = UserHandle.of(10)
+
     @Test
-    fun test_sanitizePayloadIntents() {
+    fun test_sanitizePayloadIntents_defaultPredicate() {
         val intents =
             listOf(
                 Intent(ACTION_SEND).apply { setPackage("org.test.example") },
                 Intent(ACTION_SEND).apply {
-                    setComponent(
-                        ComponentName.unflattenFromString("org.test.example/.TestActivity")
-                    )
+                    component = ComponentName.unflattenFromString("org.test.example/.TestActivity")
                 },
                 Intent(ACTION_SEND).apply {
-                    setSelector(Intent(ACTION_SEND).apply { setPackage("org.test.example") })
+                    selector = Intent(ACTION_SEND).apply { setPackage("org.test.example") }
                 },
                 Intent(ACTION_SEND).apply {
-                    setSelector(
+                    selector =
                         Intent(ACTION_SEND).apply {
-                            setComponent(
+                            component =
                                 ComponentName.unflattenFromString("org.test.example/.TestActivity")
-                            )
                         }
-                    )
                 },
             )
 
@@ -52,11 +60,152 @@ class IntentUtilsTest {
         assertThat(sanitized).hasSize(intents.size)
         for (i in sanitized) {
             assertThat(i.getPackage()).isNull()
-            assertThat(i.getComponent()).isNull()
-            i.getSelector()?.let {
+            assertThat(i.component).isNull()
+            i.selector?.let {
                 assertThat(it.getPackage()).isNull()
-                assertThat(it.getComponent()).isNull()
+                assertThat(it.component).isNull()
             }
         }
+    }
+
+    @Test
+    fun test_sanitizePayloadIntents_emptyList() {
+        val sanitized = sanitizePayloadIntents(emptyList())
+        assertThat(sanitized).isEmpty()
+    }
+
+    @Test
+    fun test_sanitizePayloadIntents_withPredicate() {
+        val intentToKeep = Intent(ACTION_SEND).apply { type = "text/plain" }
+        val intentToFilter = Intent(ACTION_VIEW).apply { data = Uri.parse("http://example.com") }
+        val intents = listOf(intentToKeep, intentToFilter)
+
+        val sanitized = sanitizePayloadIntents(intents) { it.action == ACTION_SEND }
+
+        assertThat(sanitized).hasSize(1)
+        assertThat(sanitized[0].action).isEqualTo(ACTION_SEND)
+    }
+
+    @Test
+    fun prepareCrossProfileIntents_targetIntentCannotBeForwarded_returnsEmptyList() {
+        val targetIntent = Intent(ACTION_SEND).apply { type = "text/plain" }
+        val payloadIntents = listOf(targetIntent)
+
+        val result =
+            prepareCrossProfileIntents(
+                mockContentResolver,
+                targetIntent,
+                payloadIntents,
+                sourceUser,
+                targetUser,
+                { mockPackageManager },
+                { _, _, _, _, _ -> false },
+            )
+
+        assertThat(result).isEmpty()
+    }
+
+    @Test
+    fun prepareCrossProfileIntents_somePayloadsCannotBeForwarded_returnsFilteredList() {
+        val targetIntent = Intent(ACTION_SEND).apply { type = "text/plain" }
+        val forwardablePayload = Intent(ACTION_SEND).apply { type = "image/png" }
+        val nonForwardablePayload = Intent(ACTION_VIEW)
+        val intents = listOf(targetIntent, forwardablePayload, nonForwardablePayload)
+
+        val result =
+            prepareCrossProfileIntents(
+                mockContentResolver,
+                targetIntent,
+                intents,
+                sourceUser,
+                targetUser,
+                { mockPackageManager },
+                { intent, _, _, _, _ ->
+                    when (intent) {
+                        targetIntent -> true
+                        forwardablePayload -> true
+                        else -> false
+                    }
+                },
+            )
+
+        assertThat(result).hasSize(2)
+        assertThat(result[0].action).isEqualTo(ACTION_SEND)
+        assertThat(result[0].type).isEqualTo("text/plain")
+        assertThat(result[1].action).isEqualTo(ACTION_SEND)
+        assertThat(result[1].type).isEqualTo("image/png")
+    }
+
+    @Test
+    fun prepareCrossProfileIntents_allPayloadsCanBeForwarded_returnsSanitizedList() {
+        val targetIntent =
+            Intent(ACTION_SEND).apply {
+                type = "text/plain"
+                setPackage("foo")
+            }
+        val payloadIntent =
+            Intent(ACTION_SEND).apply {
+                type = "image/png"
+                component = ComponentName("bar", "baz")
+            }
+        val intents = listOf(targetIntent, payloadIntent)
+
+        val result =
+            prepareCrossProfileIntents(
+                mockContentResolver,
+                targetIntent,
+                intents,
+                sourceUser,
+                targetUser,
+                { mockPackageManager },
+                { _, _, _, _, _ -> true },
+            )
+
+        assertThat(result).hasSize(2)
+        result.forEach {
+            assertThat(it.getPackage()).isNull()
+            assertThat(it.component).isNull()
+        }
+    }
+
+    @Test
+    fun prepareCrossProfileIntents_emptyIntentList_returnsEmptyList() {
+        val targetIntent = Intent(ACTION_SEND).apply { type = "text/plain" }
+
+        val result =
+            prepareCrossProfileIntents(
+                mockContentResolver,
+                targetIntent,
+                emptyList(),
+                sourceUser,
+                targetUser,
+                { mockPackageManager },
+                { _, _, _, _, _ -> true },
+            )
+
+        assertThat(result).isEmpty()
+    }
+
+    @Test
+    fun prepareCrossProfileIntents_usesPackageManagerProvider() {
+        val targetIntent = Intent(ACTION_SEND).apply { type = "text/plain" }
+        val intents = listOf(targetIntent)
+        var providerCalled = false
+        val packageManagerProvider = {
+            providerCalled = true
+            mockPackageManager
+        }
+
+        prepareCrossProfileIntents(
+            mockContentResolver,
+            targetIntent,
+            intents,
+            sourceUser,
+            targetUser,
+            packageManagerProvider,
+            { _, _, _, _, _ -> true },
+        )
+
+        assertThat(providerCalled).isTrue()
     }
 }

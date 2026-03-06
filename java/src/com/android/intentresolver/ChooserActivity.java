@@ -31,6 +31,7 @@ import static com.android.intentresolver.Flags.unselectFinalItem;
 import static com.android.intentresolver.ext.CreationExtrasExtKt.replaceDefaultArgs;
 import static com.android.intentresolver.profiles.MultiProfilePagerAdapter.PROFILE_PERSONAL;
 import static com.android.intentresolver.profiles.MultiProfilePagerAdapter.PROFILE_WORK;
+import static com.android.intentresolver.util.IntentUtils.prepareCrossProfileIntents;
 import static com.android.internal.util.LatencyTracker.ACTION_LOAD_SHARE_SHEET;
 
 import static java.util.Objects.requireNonNull;
@@ -106,6 +107,7 @@ import com.android.intentresolver.data.model.ChooserRequest;
 import com.android.intentresolver.data.repository.ActivityModelRepository;
 import com.android.intentresolver.data.repository.DevicePolicyResources;
 import com.android.intentresolver.domain.interactor.UserInteractor;
+import com.android.intentresolver.emptystate.AlwaysTrueCrossProfileIntentsChecker;
 import com.android.intentresolver.emptystate.CompositeEmptyStateProvider;
 import com.android.intentresolver.emptystate.CrossProfileIntentsChecker;
 import com.android.intentresolver.emptystate.EmptyStateProvider;
@@ -1151,7 +1153,7 @@ public class ChooserActivity extends Hilt_ChooserActivity implements
     // @NonFinalForTesting
     @VisibleForTesting
     protected CrossProfileIntentsChecker createCrossProfileIntentsChecker() {
-        return new CrossProfileIntentsChecker(getContentResolver());
+        return new AlwaysTrueCrossProfileIntentsChecker(getContentResolver());
     }
 
     protected final EmptyStateProvider createEmptyStateProvider(
@@ -1469,7 +1471,12 @@ public class ChooserActivity extends Hilt_ChooserActivity implements
             ChooserGridAdapter adapter = createChooserGridAdapter(
                     context,
                     isCrossProfile
-                            ? request.getCrossProfilePayloadIntents()
+                            ? prepareCrossProfileIntents(
+                                    getContentResolver(),
+                                    mRequest.getTargetIntent(),
+                                    request.getCrossProfilePayloadIntents(),
+                                    getEffectiveProfile(launchedAs).getPrimary().getHandle(),
+                                    getEffectiveProfile(profile).getPrimary().getHandle())
                             : request.getPayloadIntents(),
                     isCrossProfile ? null : initialIntentArray,
                     profile.getPrimary().getHandle()
@@ -1499,6 +1506,15 @@ public class ChooserActivity extends Hilt_ChooserActivity implements
                 profileHelper.getWorkHandle(),
                 profileHelper.getCloneHandle(),
                 maxTargetsPerRow);
+    }
+
+    private Profile getEffectiveProfile(Profile profile) {
+        // When sharing into or out of Private profile, perform the check using the parent profile
+        // instead. (Hard-coded application of CROSS_PROFILE_CONTENT_SHARING_DELEGATE_FROM_PARENT)
+        // Assumption baked into design: "Personal" profile is the parent of all other profiles.
+        return profile.getType() == Profile.Type.PRIVATE
+                ? mProfiles.getPersonalProfile()
+                : profile;
     }
 
     protected EmptyStateProvider createBlockerEmptyStateProvider() {
