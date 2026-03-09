@@ -15,14 +15,14 @@
  */
 package com.android.intentresolver.emptystate;
 
+import static com.android.intentresolver.util.IntentUtils.isCrossProfileIntent;
+
 import android.annotation.NonNull;
 import android.annotation.UserIdInt;
 import android.app.AppGlobals;
 import android.content.ContentResolver;
 import android.content.Intent;
 import android.content.pm.IPackageManager;
-
-import com.android.intentresolver.IntentForwarderActivity;
 
 import java.util.List;
 
@@ -52,7 +52,6 @@ public class CrossProfileIntentsChecker {
     public boolean hasCrossProfileIntents(
             List<Intent> intents, @UserIdInt int source, @UserIdInt int target) {
         return intents.stream().anyMatch(intent ->
-                null != IntentForwarderActivity.canForward(intent, source, target,
-                        mPackageManager, intent.resolveTypeIfNeeded(mContentResolver)));
+                isCrossProfileIntent(intent, source, target, mPackageManager, mContentResolver));
     }
 }
