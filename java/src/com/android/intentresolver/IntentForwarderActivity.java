@@ -428,9 +428,15 @@ public class IntentForwarderActivity extends Activity  {
         @Nullable
         public CompletableFuture<ResolveInfo> resolveActivityAsUser(Intent intent,
                 String resolvedType, int flags, int userId) {
+            // PackageManager.resolveActivityAsUser(Intent, String, int, int) was removed
+            // upstream; the intent itself now needs to carry the resolved type. Copy
+            // rather than mutate the caller's intent, and only override the type when
+            // resolvedType is actually known -- an already-set type on the intent should
+            // not be clobbered with null.
+            final Intent typedIntent = (resolvedType != null)
+                    ? new Intent(intent).setType(resolvedType) : intent;
             return CompletableFuture.supplyAsync(
-                    () -> getPackageManager().resolveActivityAsUser(intent,
-                            resolvedType, flags, userId));
+                    () -> getPackageManager().resolveActivityAsUser(typedIntent, flags, userId));
         }
 
         @Override
